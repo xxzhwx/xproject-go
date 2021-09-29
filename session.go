@@ -13,9 +13,9 @@ const sendChanSize int = 64
 var newSessionId uint64
 
 type Session struct {
-	id    uint64
-	codec Codec
-	mgr   *SessionMgr
+	id           uint64
+	codec        Codec
+	eventHandler SessionEventHandler
 
 	sendChan chan interface{}
 
@@ -27,20 +27,21 @@ type SessionEventHandler interface {
 	// called when session received a message
 	HandleMsg(session *Session, msg interface{})
 	// called when session closed
-	// OnClose(session *Session)
+	OnClose(session *Session)
 }
 
-func newSession(mgr *SessionMgr, codec Codec) *Session {
+func newSession(codec Codec, eventHandler SessionEventHandler) *Session {
 	session := &Session{
-		id:       atomic.AddUint64(&newSessionId, 1),
-		codec:    codec,
-		mgr:      mgr,
-		sendChan: make(chan interface{}, sendChanSize),
+		id:           atomic.AddUint64(&newSessionId, 1),
+		codec:        codec,
+		eventHandler: eventHandler,
+		sendChan:     make(chan interface{}, sendChanSize),
 
 		closeChan: make(chan int),
 	}
 
 	go session.sendLoop()
+	go session.receiveLoop()
 
 	return session
 }
@@ -67,10 +68,7 @@ func (_this *Session) Close() error {
 
 		err := _this.codec.Close()
 
-		go func() {
-			_this.mgr.delSession(_this)
-		}()
-
+		_this.eventHandler.OnClose(_this)
 		return err
 	}
 
@@ -93,14 +91,23 @@ func (_this *Session) sendLoop() {
 	}
 }
 
-func (_this *Session) Receive() (interface{}, error) {
+func (_this *Session) receiveLoop() {
+	for {
+		msg, err := _this.codec.Receive()
+		if err != nil {
+			_this.Close()
+			return
+		}
 
-	msg, err := _this.codec.Receive()
-	if err != nil {
-		_this.Close()
+		_this.eventHandler.HandleMsg(_this, msg)
+
+		select {
+		case <-_this.closeChan:
+			return
+		default:
+			continue
+		}
 	}
-
-	return msg, err
 }
 
 func (_this *Session) Send(msg interface{}) error {

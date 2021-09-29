@@ -14,6 +14,10 @@ type Acceptor struct {
 type AcceptorEventHandler interface {
 	// called when acceptor accepted a new session
 	OnNewSession(session *Session)
+	// called when session received a message
+	OnHandleSessionMsg(session *Session, msg interface{})
+	// called when session closed
+	// OnCloseSession(session *Session)
 }
 
 func NewAcceptor(network string, address string, protocol Protocol, eventHandler AcceptorEventHandler) (*Acceptor, error) {
@@ -30,6 +34,17 @@ func NewAcceptor(network string, address string, protocol Protocol, eventHandler
 	}, nil
 }
 
+// Implement SessionEventHandler.HandleMsg
+func (_this *Acceptor) HandleMsg(session *Session, msg interface{}) {
+	_this.eventHandler.OnHandleSessionMsg(session, msg)
+}
+
+// Implement SessionEventHandler.OnClose
+func (_this *Acceptor) OnClose(session *Session) {
+	_this.sessionMgr.DelSession(session) // New and Del both controlled by Acceptor
+	// _this.eventHandler.OnCloseSession(session) // use goroutine ?
+}
+
 func (_this *Acceptor) Run() error {
 	for {
 		conn, err := _this.listener.Accept()
@@ -43,7 +58,7 @@ func (_this *Acceptor) Run() error {
 			return err
 		}
 
-		session := _this.sessionMgr.NewSession(codec)
+		session := _this.sessionMgr.NewSession(codec, _this)
 		go _this.eventHandler.OnNewSession(session)
 	}
 }

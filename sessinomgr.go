@@ -39,8 +39,8 @@ func (_this *SessionMgr) Dispose() {
 	})
 }
 
-func (_this *SessionMgr) NewSession(codec Codec) *Session {
-	session := newSession(_this, codec)
+func (_this *SessionMgr) NewSession(codec Codec, eventHandler SessionEventHandler) *Session {
+	session := newSession(codec, eventHandler)
 	_this.putSession(session)
 	return session
 }
@@ -70,7 +70,7 @@ func (_this *SessionMgr) putSession(session *Session) {
 	_this.disposeWait.Add(1)
 }
 
-func (_this *SessionMgr) delSession(session *Session) {
+func (_this *SessionMgr) DelSession(session *Session) {
 	smap := &_this.sessionMaps[session.id%sessionMapNum]
 
 	smap.Lock()
